@@ -274,7 +274,7 @@ $('galleryUpload').addEventListener('change',async e=>{const files=[...e.target.
 renderGallery();
 
 // Controle financeiro privado com senha solicitada.
-const FINANCE_PASSWORD='2026', FINANCE_KEY='akannePrivateFinanceV1';
+const FINANCE_PASSWORD='@AKANNE2026', FINANCE_KEY='akannePrivateFinanceV1';
 function financeRows(){try{return JSON.parse(localStorage.getItem(FINANCE_KEY)||'[]')}catch(e){return []}}
 function financeMoney(n){return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function renderFinance(){const rows=financeRows();let income=0,expense=0;rows.forEach(r=>r.type==='entrada'?income+=r.value:expense+=r.value);$('financeIncome').textContent=financeMoney(income);$('financeExpense').textContent=financeMoney(expense);$('financeBalance').textContent=financeMoney(income-expense);const box=$('financeEntries');box.innerHTML='';if(!rows.length){box.innerHTML='<div class="empty">Nenhum lançamento registrado.</div>';return}rows.slice().reverse().forEach(r=>{const el=document.createElement('div');el.className='finance-entry';el.innerHTML=`<div><strong>${esc(r.description)}</strong><small>${esc(r.date.split('-').reverse().join('/'))} · ${r.type==='entrada'?'Entrada':'Despesa'}</small></div><div style="text-align:right"><strong style="color:${r.type==='entrada'?'#78d69b':'#ff9d9d'}">${financeMoney(r.value)}</strong><br><button class="small-btn danger" type="button">Excluir</button></div>`;el.querySelector('button').addEventListener('click',()=>{if(confirm('Excluir este lançamento?')){localStorage.setItem(FINANCE_KEY,JSON.stringify(financeRows().filter(x=>x.id!==r.id)));renderFinance()}});box.appendChild(el)})}
