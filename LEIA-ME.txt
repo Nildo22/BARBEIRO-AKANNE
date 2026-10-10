@@ -1,0 +1,13 @@
+SITE BARBEIRO AKANNE — VERSÃO PROFISSIONAL
+
+COMO USAR
+1. Extraia os arquivos da pasta/ZIP para o mesmo local.
+2. Abra index.html no navegador.
+3. Use “Adicionar fotos” na galeria para escolher imagens do computador. As imagens são guardadas neste navegador.
+4. Para abrir o controle financeiro, role até “Controle financeiro” e digite a senha 2026.
+5. Os agendamentos podem ser solicitados pelo WhatsApp; a barbearia precisa confirmar o horário.
+
+IMPORTANTE
+Este é um site estático. Fotos, avaliações, agendamentos e lançamentos ficam no armazenamento local do navegador/aparelho. Não são sincronizados entre dispositivos. A senha do financeiro é um bloqueio básico e pode ser encontrada por alguém com acesso ao código-fonte. Para segurança real, autenticação e banco de dados no servidor são necessários.
+
+Mantenha index.html e logo-akanne.png na mesma pasta para a logo aparecer corretamente.
