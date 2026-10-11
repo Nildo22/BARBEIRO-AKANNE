@@ -161,7 +161,7 @@ header{position:sticky;top:0;z-index:10;background:rgba(9,9,9,.94);backdrop-filt
      </div>
      <div class="form-actions"><button class="btn btn-gold" type="submit">Enviar avaliação</button></div>
      <div id="feedbackNotice" class="notice" role="status"></div>
-     <p class="hint">No modo de teste, sua avaliação fica salva apenas neste navegador. A publicação online compartilhada exige banco de dados.</p>
+     <p class="hint">As avaliações são publicadas online e ficam visíveis para todos os visitantes.</p>
     </form>
    </div>
    <div>
@@ -193,7 +193,7 @@ header{position:sticky;top:0;z-index:10;background:rgba(9,9,9,.94);backdrop-filt
  <div id="adminLogin"><div class="form-card" style="max-width:460px;margin:auto"><div class="field"><label for="adminPin">Senha de demonstração</label><input id="adminPin" type="password" placeholder="Digite a senha"></div><div class="form-actions"><button class="btn btn-gold" id="loginBtn" type="button">Entrar no painel</button></div><p class="admin-help">.</p><div id="loginError" class="hint"></div></div></div>
  <div id="adminContent" hidden><div class="admin-tools"><button class="btn btn-outline" id="exportBtn">Exportar reservas CSV</button><button class="btn btn-outline" id="refreshBtn">Atualizar lista</button><button class="btn btn-outline" id="logoutBtn">Sair</button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Data / hora</th><th>Cliente</th><th>Contato</th><th>Serviço</th><th>Barbeiro</th><th>Status</th><th>Ações</th></tr></thead><tbody id="bookingRows"></tbody></table></div><div id="emptyAdmin" class="empty">Ainda não há reservas salvas neste navegador.</div></div>
  
- <div style="margin-top:30px"><h3>Avaliações recebidas neste navegador</h3><div id="adminFeedbackList" class="feedback-list"></div></div>
+ <div style="margin-top:30px"><h3>Avaliações online dos clientes</h3><div id="adminFeedbackList" class="feedback-list"></div></div>
 </div></section>
 </main>
 <footer><div class="wrap footer-row"><div>© <span id="year"></span> Barbeiro Akanne. Todos os direitos reservados.</div><div>Vila Valentim Serra — PA · Estilo, atitude e confiança em cada corte.</div><button class="admin-toggle" id="adminToggle">Acesso do administrador</button></div></footer>
@@ -245,26 +245,31 @@ function renderAdmin(){renderFeedback();const rows=getBookings().sort((a,b)=>(a.
 $('bookingRows').addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;const rows=getBookings(),b=rows.find(x=>x.id===btn.dataset.id);if(!b)return;if(btn.dataset.action==='confirm'){b.status='Confirmado';setBookings(rows);renderAdmin();const msg=`Olá ${b.name}! Seu horário na Barbearia Barbeiro Akanne está confirmado.%0AServiço: ${b.service}%0ABarbeiro: ${b.barber}%0AData: ${b.date.split('-').reverse().join('/')}%0AHorário: ${b.time}%0ALocal: Vila Valentim Serra - PA.`;window.open(`https://wa.me/55${b.phone.replace(/\D/g,'').replace(/^55/,'')}?text=${msg}`,'_blank','noopener')}else if(btn.dataset.action==='cancel'){b.status='Cancelado';setBookings(rows);renderAdmin();renderTimes()}else if(btn.dataset.action==='wa'){window.open(`https://wa.me/55${b.phone.replace(/\D/g,'').replace(/^55/,'')}`,'_blank','noopener')}});
 $('exportBtn').addEventListener('click',()=>{const rows=getBookings();const keys=['name','phone','service','barber','date','time','status','notes'];const csv=[keys.join(';'),...rows.map(b=>keys.map(k=>'"'+String(b[k]??'').replace(/"/g,'""')+'"').join(';'))].join('\r\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='agendamentos-barbeiro-akanne.csv';a.click();URL.revokeObjectURL(a.href)});
 
-const FEEDBACK_KEY='akanneFeedbackV1';
+const SUPABASE_URL='https://pngdfahhyxzxuxylpkqu.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_HRl6xp4ZKTYDM2IipnhClg_K9aAPd8r';
+const FEEDBACK_ENDPOINT=SUPABASE_URL+'/rest/v1/feedbacks';
 let chosenRating=0;
-function getFeedback(){try{return JSON.parse(localStorage.getItem(FEEDBACK_KEY)||'[]')}catch(e){return []}}
-function setFeedback(rows){localStorage.setItem(FEEDBACK_KEY,JSON.stringify(rows))}
+let feedbackRows=[];
+let feedbackLoadInProgress=false;
+function feedbackHeaders(extra={}){return {'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json',...extra}}
+function feedbackDate(value){if(!value)return '';const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleDateString('pt-BR')}
+async function loadFeedback(){if(feedbackLoadInProgress)return;feedbackLoadInProgress=true;try{const response=await fetch(FEEDBACK_ENDPOINT+'?select=id,nome,nota,mensagem,criado_em&order=criado_em.desc',{headers:feedbackHeaders(),cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);const data=await response.json();feedbackRows=data.map(f=>({id:f.id,name:f.nome||'Cliente',rating:Number(f.nota)||0,message:f.mensagem||'',date:feedbackDate(f.criado_em)}));renderFeedback()}catch(error){console.error('Falha ao carregar avaliações do Supabase:',error);if(!feedbackRows.length){$('feedbackList').innerHTML='<div class="empty">Não foi possível carregar as avaliações agora. Atualize a página em instantes.</div>'}}finally{feedbackLoadInProgress=false}}
 function renderFeedback(){
- const rows=getFeedback().slice().reverse(),list=$('feedbackList');
- list.innerHTML='';
+ const rows=feedbackRows,list=$('feedbackList');list.innerHTML='';
  if(!rows.length){list.innerHTML='<div class="empty">Seja o primeiro a avaliar a barbearia!</div>'}
  rows.forEach(f=>{const item=document.createElement('article');item.className='feedback-item';item.innerHTML=`<div class="stars">${'★'.repeat(f.rating)}${'☆'.repeat(5-f.rating)}</div><p>${esc(f.message)}</p><small>${esc(f.name||'Cliente')} · ${esc(f.date)}</small>`;list.appendChild(item)});
- const adminList=$('adminFeedbackList');
- if(adminList){adminList.innerHTML='';if(!rows.length)adminList.innerHTML='<div class="empty">Nenhuma avaliação recebida.</div>';rows.forEach(f=>{const item=document.createElement('article');item.className='feedback-item';item.innerHTML=`<div class="stars">${'★'.repeat(f.rating)}${'☆'.repeat(5-f.rating)}</div><p>${esc(f.message)}</p><small>${esc(f.name||'Cliente')} · ${esc(f.date)}</small><div><button class="small-btn danger" data-feedback-delete="${esc(f.id)}">Excluir</button></div>`;adminList.appendChild(item)})}
+ const adminList=$('adminFeedbackList');if(adminList){adminList.innerHTML='';if(!rows.length)adminList.innerHTML='<div class="empty">Nenhuma avaliação recebida.</div>';rows.forEach(f=>{const item=document.createElement('article');item.className='feedback-item';item.innerHTML=`<div class="stars">${'★'.repeat(f.rating)}${'☆'.repeat(5-f.rating)}</div><p>${esc(f.message)}</p><small>${esc(f.name||'Cliente')} · ${esc(f.date)}</small>`;adminList.appendChild(item)})}
 }
 $('starChoices').addEventListener('click',e=>{const btn=e.target.closest('[data-rating]');if(!btn)return;chosenRating=Number(btn.dataset.rating);document.querySelectorAll('.star-choice').forEach(b=>b.classList.toggle('active',Number(b.dataset.rating)<=chosenRating))});
-$('feedbackForm').addEventListener('submit',e=>{e.preventDefault();if(!chosenRating){$('feedbackNotice').textContent='Selecione uma nota de 1 a 5 estrelas.';$('feedbackNotice').classList.add('show');return}
- const message=$('feedbackMessage').value.trim();if(!message){return}
- const rows=getFeedback();rows.push({id:Date.now().toString(36),name:$('feedbackName').value.trim(),rating:chosenRating,message,date:localDateString().split('-').reverse().join('/')});setFeedback(rows);
- $('feedbackForm').reset();chosenRating=0;document.querySelectorAll('.star-choice').forEach(b=>b.classList.remove('active'));
- $('feedbackNotice').textContent='Obrigado pelo feedback! Sua avaliação foi registrada neste navegador.';$('feedbackNotice').classList.add('show');renderFeedback();
+$('feedbackForm').addEventListener('submit',async e=>{e.preventDefault();if(!chosenRating){$('feedbackNotice').textContent='Selecione uma nota de 1 a 5 estrelas.';$('feedbackNotice').classList.add('show');return}
+ const message=$('feedbackMessage').value.trim();if(!message)return;const name=$('feedbackName').value.trim()||'Cliente';const submit=$('feedbackForm').querySelector('button[type="submit"]');submit.disabled=true;submit.textContent='Enviando...';
+ try{const response=await fetch(FEEDBACK_ENDPOINT,{method:'POST',headers:feedbackHeaders({'Prefer':'return=minimal'}),body:JSON.stringify({nome:name,nota:chosenRating,mensagem:message})});if(!response.ok){const detail=await response.text();throw new Error('HTTP '+response.status+' '+detail)}
+ $('feedbackForm').reset();chosenRating=0;document.querySelectorAll('.star-choice').forEach(b=>b.classList.remove('active'));$('feedbackNotice').textContent='Obrigado pelo feedback! Sua avaliação foi publicada e já está disponível online.';$('feedbackNotice').classList.add('show');await loadFeedback();
+ }catch(error){console.error('Falha ao enviar avaliação:',error);$('feedbackNotice').textContent='Não foi possível enviar agora. Verifique sua conexão e tente novamente.';$('feedbackNotice').classList.add('show')}finally{submit.disabled=false;submit.textContent='Enviar avaliação'}
 });
-$('adminFeedbackList').addEventListener('click',e=>{const btn=e.target.closest('[data-feedback-delete]');if(!btn)return;setFeedback(getFeedback().filter(f=>f.id!==btn.dataset.feedbackDelete));renderFeedback()});
+// Atualiza a lista periodicamente para que avaliações de outros visitantes apareçam sem recarregar a página.
+loadFeedback();setInterval(loadFeedback,15000);
+
 
 // Galeria: permite selecionar várias fotos, pré-visualizar e remover.
 const GALLERY_KEY='akanneGalleryPhotosV1';
