@@ -292,5 +292,76 @@ $('financeExport').addEventListener('click',()=>{const rows=financeRows(),csv='\
 renderFeedback();
 renderTimes();
 </script>
+
+<!-- ADIÇÕES: galeria compartilhada no Supabase + ajustes de espaço responsivo. O conteúdo original do site foi preservado. -->
+<style id="akanne-gallery-layout-additions">
+  .wrap{width:min(1240px,94%)}
+  section{padding-top:76px;padding-bottom:76px}
+  .gallery-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+  .gallery-card{min-width:0}
+  .gallery-card img{height:300px;object-fit:cover}
+  .gallery-caption{line-height:1.45}
+  .gallery-toolbar{margin-bottom:26px}
+  @media(max-width:800px){section{padding-top:54px;padding-bottom:54px}.gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.gallery-card img{height:230px}}
+  @media(max-width:480px){.wrap{width:94%}.gallery-grid{grid-template-columns:1fr}.gallery-card img{height:auto;max-height:420px;aspect-ratio:4/3}.gallery-toolbar{gap:12px}}
+</style>
+<script id="akanne-shared-gallery-additions">
+(function(){
+  const BUCKET='galeria-akanne';
+  const endpoint=SUPABASE_URL+'/storage/v1';
+  const headers={'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY};
+  let cloudPhotos=[];
+  let loading=false;
+  function safeFileName(name){return String(name||'foto').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(-100)||'foto.jpg'}
+  function publicUrl(name){return endpoint+'/object/public/'+BUCKET+'/'+name.split('/').map(encodeURIComponent).join('/')}
+  async function loadCloudGallery(){
+    if(loading)return;loading=true;
+    try{
+      const response=await fetch(endpoint+'/object/list/'+BUCKET,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({prefix:'',limit:100,offset:0,sortBy:{column:'created_at',order:'desc'}}),cache:'no-store'});
+      if(!response.ok)throw new Error('Storage list HTTP '+response.status+' '+(await response.text()).slice(0,200));
+      const rows=await response.json();
+      cloudPhotos=rows.filter(x=>x.name && !x.id?.startsWith('folder')).map(x=>({name:x.name,url:publicUrl(x.name),date:x.created_at||x.updated_at||''}));
+      renderGallery();
+    }catch(err){
+      console.error('Galeria compartilhada: falha ao carregar do Supabase.',err);
+      const grid=$('galleryGrid');
+      if(!cloudPhotos.length)grid.innerHTML='<div class="gallery-empty"><div style="font-size:36px;margin-bottom:8px">📸</div><strong>Não foi possível carregar a galeria online</strong><p>Confira se o bucket público “galeria-akanne” foi criado no Supabase e se a política de leitura está ativa.</p><button type="button" class="btn btn-outline" id="galleryRetry">Tentar novamente</button></div>';
+      const retry=$('galleryRetry');if(retry)retry.addEventListener('click',loadCloudGallery);
+    }finally{loading=false}
+  }
+  // Substitui somente a função de exibição da galeria; as demais funções do site permanecem intactas.
+  window.renderGallery=function(){
+    const grid=$('galleryGrid');if(!grid)return;
+    $('galleryCount').textContent=cloudPhotos.length+(cloudPhotos.length===1?' foto na galeria online':' fotos na galeria online');
+    grid.innerHTML='';
+    if(!cloudPhotos.length){grid.innerHTML='<div class="gallery-empty"><div style="font-size:36px;margin-bottom:8px">📸</div><strong>Sua galeria começa aqui</strong><p>Adicione fotos para que os clientes possam vê-las em qualquer celular ou computador.</p></div>';return}
+    cloudPhotos.forEach(p=>{const card=document.createElement('article');card.className='gallery-card';const img=document.createElement('img');img.src=p.url;img.alt='Trabalho do Barbeiro Akanne';img.loading='lazy';img.onerror=()=>{img.alt='Não foi possível abrir esta foto';img.style.objectFit='contain'};const caption=document.createElement('div');caption.className='gallery-caption';caption.textContent='Trabalho do Barbeiro Akanne';card.append(img,caption);grid.appendChild(card)});
+  };
+  // Capture impede o antigo handler local de consumir o upload antes da galeria online.
+  $('galleryUpload').addEventListener('change',async function(e){
+    e.stopImmediatePropagation();
+    const files=Array.from(this.files||[]).filter(f=>f.type.startsWith('image/'));
+    if(!files.length)return;
+    const label=document.querySelector('label[for="galleryUpload"]');const oldText=label.textContent;
+    label.textContent='Enviando fotos...';label.style.pointerEvents='none';
+    let successes=0;let failures=[];
+    try{
+      for(const file of files){
+        if(file.size>5*1024*1024){failures.push(file.name+' (mais de 5 MB)');continue}
+        const path=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+safeFileName(file.name);
+        const response=await fetch(endpoint+'/object/'+BUCKET+'/'+path,{method:'POST',headers:{...headers,'Content-Type':file.type,'x-upsert':'false'},body:file});
+        if(!response.ok){failures.push(file.name+' (erro '+response.status+')');console.error('Falha no upload da galeria:',await response.text());continue}
+        successes++;
+      }
+      await loadCloudGallery();
+      if(successes&&failures.length===0)alert(successes+' foto(s) enviada(s) para a galeria online. Agora os clientes poderão vê-las.');
+      else if(successes)alert(successes+' foto(s) enviada(s). Não foi possível enviar: '+failures.join(', '));
+      else alert('Nenhuma foto foi enviada. Confira se o bucket e as políticas do Supabase estão configurados. '+failures.join(', '));
+    }catch(err){console.error(err);alert('Falha ao enviar fotos. Confira sua conexão e as configurações do Supabase Storage.')}finally{label.textContent=oldText;label.style.pointerEvents='';this.value=''}
+  },true);
+  loadCloudGallery();setInterval(loadCloudGallery,30000);
+})();
+</script>
+
 </body>
 </html>
