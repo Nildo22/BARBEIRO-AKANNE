@@ -1,13 +1,32 @@
-SITE BARBEIRO AKANNE — VERSÃO PROFISSIONAL
+BARBEIRO AKANNE — GALERIA COM CURTIDAS E COMENTÁRIOS
 
-COMO USAR
-1. Extraia os arquivos da pasta/ZIP para o mesmo local.
-2. Abra index.html no navegador.
-3. Use “Adicionar fotos” na galeria para escolher imagens do computador. As imagens são guardadas neste navegador.
-4. Para abrir o controle financeiro, role até “Controle financeiro” e digite a senha 2026.
-5. Os agendamentos podem ser solicitados pelo WhatsApp; a barbearia precisa confirmar o horário.
+ARQUIVOS
+- index.html: site atualizado, mantendo as funções existentes e acrescentando curtidas/comentários.
+- logo-akanne.png: logo que acompanha o site.
+- setup_supabase_galeria.sql: tabelas e políticas de segurança para o Supabase.
 
-IMPORTANTE
-Este é um site estático. Fotos, avaliações, agendamentos e lançamentos ficam no armazenamento local do navegador/aparelho. Não são sincronizados entre dispositivos. A senha do financeiro é um bloqueio básico e pode ser encontrada por alguém com acesso ao código-fonte. Para segurança real, autenticação e banco de dados no servidor são necessários.
+CONFIGURAÇÃO (necessária antes de publicar)
+1. Faça uma cópia de segurança do site que está publicado.
+2. No Supabase, abra o projeto já usado pelo site.
+3. Vá em SQL Editor > New query, abra setup_supabase_galeria.sql, copie todo o conteúdo e clique em Run.
+4. No Supabase, abra Authentication > Users > Add user e crie a conta administrativa usando seu próprio e-mail e uma senha forte. Não coloque a senha no HTML.
+5. Copie o e-mail usado e, no SQL Editor, execute este comando substituindo SEU_EMAIL_AQUI pelo e-mail exato:
 
-Mantenha index.html e logo-akanne.png na mesma pasta para a logo aparecer corretamente.
+   insert into public.gallery_admins (user_id)
+   select id from auth.users where email = 'SEU_EMAIL_AQUI'
+   on conflict (user_id) do nothing;
+
+6. Publique/substitua o index.html pelo arquivo deste pacote, mantendo logo-akanne.png na mesma pasta.
+7. Abra o site publicado. Na seção Galeria de cortes, use “Área administrativa da galeria” para entrar com o e-mail e senha do Supabase.
+8. Com o login ativo, “Adicionar fotos” poderá enviar fotos. Comentários de clientes ficam pendentes até serem aprovados na mesma área administrativa.
+
+COMO FUNCIONA
+- Clientes veem fotos e comentários aprovados, podem curtir e enviar comentários informando o nome.
+- Comentários novos não aparecem publicamente até serem aprovados pelo administrador.
+- A autenticação do Supabase e a tabela gallery_admins protegem upload e moderação; não use políticas de upload anônimo.
+- Curtidas são deduplicadas por foto e identificador do navegador. Isso evita curtidas repetidas no mesmo navegador, mas não é um sistema antifraude perfeito contra visitantes determinados.
+
+OBSERVAÇÕES
+- O bucket galeria-akanne fica público para leitura das imagens; isso é necessário para que os clientes vejam as fotos.
+- Nunca publique a chave service_role ou a senha administrativa no HTML. O site usa apenas a publishable key pública.
+- Agendamentos e controle financeiro do site original continuam usando o armazenamento local do navegador, não passam a ser compartilhados por esta atualização.
