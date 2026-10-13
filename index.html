@@ -134,8 +134,24 @@ header{position:sticky;top:0;z-index:10;background:rgba(9,9,9,.94);backdrop-filt
 <section class="gallery-section" id="galeria">
   <div class="wrap">
     <div class="section-head"><div class="eyebrow">Nosso trabalho em destaque</div><h2>Galeria de cortes</h2><p>Veja alguns estilos e adicione fotos reais dos seus melhores trabalhos para mostrar aos clientes.</p></div>
-    <div class="gallery-toolbar"><div><strong id="galleryCount">0 fotos na galeria</strong><div class="gallery-tip">As fotos adicionadas ficam salvas neste navegador e aparelho.</div></div>
+    <div class="gallery-toolbar"><div><strong id="galleryCount">0 fotos na galeria</strong><div class="gallery-tip">Fotos compartilhadas online. Somente o administrador autenticado pode enviar imagens.</div></div>
       <div><label class="upload-label" for="galleryUpload">＋ Adicionar fotos</label><input id="galleryUpload" type="file" accept="image/*" multiple hidden></div>
+    </div>
+    <div class="form-card" id="galleryAdminBox" style="margin:0 0 24px;padding:20px">
+      <h3 style="margin-top:0">Área administrativa da galeria</h3>
+      <p class="gallery-tip">Entre com o usuário criado em Supabase → Authentication para adicionar fotos e moderar comentários.</p>
+      <form id="galleryAdminLogin" class="form-grid" style="align-items:end">
+        <div class="field"><label for="galleryAdminEmail">E-mail administrativo</label><input id="galleryAdminEmail" type="email" autocomplete="username" required placeholder="seu e-mail"></div>
+        <div class="field"><label for="galleryAdminPassword">Senha</label><input id="galleryAdminPassword" type="password" autocomplete="current-password" required placeholder="Sua senha"></div>
+        <div class="field"><button class="btn btn-gold" type="submit" id="galleryAdminLoginBtn">Entrar</button></div>
+      </form>
+      <div id="galleryAdminStatus" class="notice" role="status" style="margin-top:12px"></div>
+      <div id="galleryAdminTools" hidden style="margin-top:16px">
+        <p><strong>Administrador conectado.</strong> O botão “Adicionar fotos” está liberado.</p>
+        <button type="button" class="btn btn-outline" id="galleryAdminLogout">Sair da administração</button>
+        <h4>Comentários aguardando aprovação</h4>
+        <div id="galleryPendingComments"><div class="empty">Carregando comentários...</div></div>
+      </div>
     </div>
     <div class="gallery-grid" id="galleryGrid"><div class="gallery-empty"><div style="font-size:36px;margin-bottom:8px">📸</div><strong>Sua galeria começa aqui</strong><p>Toque em “Adicionar fotos” para escolher imagens dos seus cortes.</p></div></div>
     <p class="gallery-tip">Dica: use fotos nítidas, bem iluminadas e com autorização dos clientes antes de publicar.</p>
@@ -337,29 +353,68 @@ renderTimes();
     if(!cloudPhotos.length){grid.innerHTML='<div class="gallery-empty"><div style="font-size:36px;margin-bottom:8px">📸</div><strong>Sua galeria começa aqui</strong><p>Adicione fotos para que os clientes possam vê-las em qualquer celular ou computador.</p></div>';return}
     cloudPhotos.forEach(p=>{const card=document.createElement('article');card.className='gallery-card';const img=document.createElement('img');img.src=p.url;img.alt='Trabalho do Barbeiro Akanne';img.loading='lazy';img.onerror=()=>{img.alt='Não foi possível abrir esta foto';img.style.objectFit='contain'};const caption=document.createElement('div');caption.className='gallery-caption';caption.textContent='Trabalho do Barbeiro Akanne';card.append(img,caption);grid.appendChild(card)});
   };
-  // Capture impede o antigo handler local de consumir o upload antes da galeria online.
-  $('galleryUpload').addEventListener('change',async function(e){
-    e.stopImmediatePropagation();
-    const files=Array.from(this.files||[]).filter(f=>f.type.startsWith('image/'));
-    if(!files.length)return;
-    const label=document.querySelector('label[for="galleryUpload"]');const oldText=label.textContent;
-    label.textContent='Enviando fotos...';label.style.pointerEvents='none';
-    let successes=0;let failures=[];
-    try{
-      for(const file of files){
-        if(file.size>5*1024*1024){failures.push(file.name+' (mais de 5 MB)');continue}
-        const path=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+safeFileName(file.name);
-        const response=await fetch(endpoint+'/object/'+BUCKET+'/'+path,{method:'POST',headers:{...headers,'Content-Type':file.type,'x-upsert':'false'},body:file});
-        if(!response.ok){failures.push(file.name+' (erro '+response.status+')');console.error('Falha no upload da galeria:',await response.text());continue}
-        successes++;
-      }
-      await loadCloudGallery();
-      if(successes&&failures.length===0)alert(successes+' foto(s) enviada(s) para a galeria online. Agora os clientes poderão vê-las.');
-      else if(successes)alert(successes+' foto(s) enviada(s). Não foi possível enviar: '+failures.join(', '));
-      else alert('Nenhuma foto foi enviada. Confira se o bucket e as políticas do Supabase estão configurados. '+failures.join(', '));
-    }catch(err){console.error(err);alert('Falha ao enviar fotos. Confira sua conexão e as configurações do Supabase Storage.')}finally{label.textContent=oldText;label.style.pointerEvents='';this.value=''}
-  },true);
+  // O envio é tratado pelo módulo de autenticação administrativa adicionado abaixo.
+  window.loadAkanneCloudGallery=loadCloudGallery;
   loadCloudGallery();setInterval(loadCloudGallery,30000);
+})();
+</script>
+
+
+<style id="akanne-gallery-social-css">
+.gallery-social{padding:14px 16px 16px;background:rgba(255,255,255,.035);border-top:1px solid rgba(255,255,255,.1)}
+.gallery-social-actions{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.gallery-like{border:1px solid #b68a4a;background:transparent;color:inherit;border-radius:999px;padding:7px 12px;cursor:pointer;font:inherit}
+.gallery-like.liked{background:#8e2430;color:#fff;border-color:#8e2430}
+.gallery-social small{opacity:.78}.gallery-comments{margin-top:12px;display:grid;gap:8px}.gallery-comment{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.055);overflow-wrap:anywhere}.gallery-comment strong{display:block;color:#d7b77e;margin-bottom:3px}
+.gallery-comment-form{display:grid;gap:8px;margin-top:12px}.gallery-comment-form input,.gallery-comment-form textarea{width:100%;box-sizing:border-box}.gallery-comment-form textarea{min-height:65px;resize:vertical}
+.gallery-admin-comment{border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:12px;margin:10px 0}.gallery-admin-comment p{overflow-wrap:anywhere}
+@media(max-width:600px){#galleryAdminLogin{grid-template-columns:1fr!important}.gallery-social{padding:12px}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script id="akanne-gallery-social-js">
+(function(){
+  if(!window.supabase||!window.supabase.createClient){console.error('Biblioteca Supabase não carregou.');return;}
+  const client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+  const $g=id=>document.getElementById(id);
+  const visitorKey='akanneGalleryVisitorV1';
+  let visitorId=localStorage.getItem(visitorKey);
+  if(!visitorId){visitorId=(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2));localStorage.setItem(visitorKey,visitorId)}
+  let currentSession=null;
+  const showStatus=(msg,ok=false)=>{const el=$g('galleryAdminStatus');if(!el)return;el.textContent=msg;el.classList.add('show');el.style.background=ok?'#1c2a1e':'#321b1b';el.style.borderColor=ok?'#315d38':'#713535'};
+  async function loadPending(){
+    const box=$g('galleryPendingComments');if(!box||!currentSession)return;
+    box.innerHTML='<div class="empty">Carregando comentários...</div>';
+    const {data,error}=await client.from('gallery_comments').select('id,photo_path,nome,mensagem,created_at').eq('is_approved',false).order('created_at',{ascending:false}).limit(100);
+    if(error){box.innerHTML='<div class="empty">Não foi possível carregar. Confira a configuração SQL e se este usuário está cadastrado como administrador.</div>';console.error(error);return}
+    box.innerHTML='';if(!data.length){box.innerHTML='<div class="empty">Nenhum comentário aguardando aprovação.</div>';return}
+    data.forEach(c=>{const el=document.createElement('article');el.className='gallery-admin-comment';const title=document.createElement('strong');title.textContent=c.nome+' · Foto: '+c.photo_path;const p=document.createElement('p');p.textContent=c.mensagem;const approve=document.createElement('button');approve.type='button';approve.className='btn btn-gold';approve.textContent='Aprovar';approve.addEventListener('click',async()=>{approve.disabled=true;const {error}=await client.from('gallery_comments').update({is_approved:true}).eq('id',c.id);if(error){alert('Não foi possível aprovar. Verifique se o usuário está cadastrado em gallery_admins.');approve.disabled=false;return}await loadPending();await window.renderGallery()});const del=document.createElement('button');del.type='button';del.className='btn btn-outline';del.textContent='Excluir';del.style.marginLeft='8px';del.addEventListener('click',async()=>{if(!confirm('Excluir este comentário?'))return;del.disabled=true;const {error}=await client.from('gallery_comments').delete().eq('id',c.id);if(error){alert('Não foi possível excluir. Confira a configuração de administrador.');del.disabled=false;return}await loadPending();await window.renderGallery()});el.append(title,p,approve,del);box.appendChild(el)});
+  }
+  function setAdminUI(session){currentSession=session;$g('galleryAdminTools').hidden=!session;$g('galleryAdminLogin').hidden=!!session;$g('galleryUpload').disabled=!session;const label=document.querySelector('label[for="galleryUpload"]');if(label){label.style.opacity=session?'1':'.55';label.title=session?'Adicionar fotos':'Entre como administrador para adicionar fotos'}if(session){showStatus('Login administrativo conectado.',true);loadPending()}else{$g('galleryAdminPassword').value='';showStatus('Entre com a conta administrativa para enviar fotos e moderar comentários.')}}
+  $g('galleryAdminLogin').addEventListener('submit',async e=>{e.preventDefault();const btn=$g('galleryAdminLoginBtn');btn.disabled=true;btn.textContent='Entrando...';const {data,error}=await client.auth.signInWithPassword({email:$g('galleryAdminEmail').value.trim(),password:$g('galleryAdminPassword').value});btn.disabled=false;btn.textContent='Entrar';if(error){showStatus('Não foi possível entrar. Confira o e-mail e a senha da conta do Supabase.');return}setAdminUI(data.session);await window.renderGallery()});
+  $g('galleryAdminLogout').addEventListener('click',async()=>{await client.auth.signOut();setAdminUI(null);await window.renderGallery()});
+  client.auth.getSession().then(({data})=>setAdminUI(data.session));
+  client.auth.onAuthStateChange((_event,session)=>{setAdminUI(session)});
+  async function loadSocial(photoPath,card){
+    const social=card.querySelector('.gallery-social');if(!social)return;
+    const {count:likeCount}=await client.from('gallery_likes').select('id',{count:'exact',head:true}).eq('photo_path',photoPath);
+    const {data:likedRows}=await client.from('gallery_likes').select('id').eq('photo_path',photoPath).eq('visitor_id',visitorId).limit(1);
+    const {data:comments}=await client.from('gallery_comments').select('id,nome,mensagem,created_at').eq('photo_path',photoPath).eq('is_approved',true).order('created_at',{ascending:false}).limit(20);
+    social.innerHTML='';const actions=document.createElement('div');actions.className='gallery-social-actions';const like=document.createElement('button');like.type='button';like.className='gallery-like'+(likedRows&&likedRows.length?' liked':'');like.textContent='♥ Curtir ('+(likeCount||0)+')';like.setAttribute('aria-pressed',String(!!(likedRows&&likedRows.length)));like.addEventListener('click',async()=>{if(likedRows&&likedRows.length){alert('Você já curtiu esta foto neste navegador.');return}like.disabled=true;const result=await client.from('gallery_likes').insert({photo_path:photoPath,visitor_id:visitorId});if(result.error)alert('Não foi possível registrar a curtida. Talvez você já tenha curtido esta foto.');await loadSocial(photoPath,card)});const count=document.createElement('small');count.textContent=(comments||[]).length+' comentário(s)';actions.append(like,count);social.appendChild(actions);
+    const commentList=document.createElement('div');commentList.className='gallery-comments';(comments||[]).forEach(c=>{const item=document.createElement('div');item.className='gallery-comment';const name=document.createElement('strong');name.textContent=c.nome;const msg=document.createElement('span');msg.textContent=c.mensagem;item.append(name,msg);commentList.appendChild(item)});if(!(comments||[]).length){const empty=document.createElement('small');empty.textContent='Seja o primeiro a comentar nesta foto.';commentList.appendChild(empty)}social.appendChild(commentList);
+    const form=document.createElement('form');form.className='gallery-comment-form';const name=document.createElement('input');name.type='text';name.maxLength=60;name.required=true;name.placeholder='Seu nome';name.setAttribute('aria-label','Seu nome');const msg=document.createElement('textarea');msg.maxLength=500;msg.required=true;msg.placeholder='Escreva um comentário respeitoso...';msg.setAttribute('aria-label','Comentário');const submit=document.createElement('button');submit.type='submit';submit.className='btn btn-outline';submit.textContent='Enviar comentário';form.append(name,msg,submit);form.addEventListener('submit',async e=>{e.preventDefault();submit.disabled=true;submit.textContent='Enviando...';const {error}=await client.from('gallery_comments').insert({photo_path:photoPath,nome:name.value.trim(),mensagem:msg.value.trim(),is_approved:false});submit.disabled=false;submit.textContent='Enviar comentário';if(error){alert('Não foi possível enviar o comentário. Tente novamente.');console.error(error);return}form.reset();alert('Obrigado! Seu comentário foi enviado e aparecerá após a aprovação da barbearia.');if(currentSession)await loadPending()});social.appendChild(form);
+  }
+  // Wrap the shared gallery renderer to add online reactions without replacing the rest of the page.
+  const originalRender=window.renderGallery;
+  window.renderGallery=function(){originalRender();const grid=$g('galleryGrid');if(!grid)return;grid.querySelectorAll('.gallery-card').forEach(card=>{const img=card.querySelector('img');if(!img)return;const url=img.src;let path='';try{path=decodeURIComponent(new URL(url).pathname.split('/object/public/galeria-akanne/')[1]||'')}catch(e){}if(!path)return;const social=document.createElement('div');social.className='gallery-social';card.appendChild(social);loadSocial(path,card)})};
+  // Replace the upload handler's authorization behavior: no active admin session means no upload.
+  $g('galleryUpload').addEventListener('change',async function(e){
+    e.stopImmediatePropagation();const {data}=await client.auth.getSession();const session=data.session;if(!session){alert('Entre na Área administrativa da galeria antes de adicionar fotos.');this.value='';return}
+    const files=Array.from(this.files||[]).filter(f=>f.type.startsWith('image/'));if(!files.length)return;
+    const label=document.querySelector('label[for="galleryUpload"]');const oldText=label.textContent;label.textContent='Enviando fotos...';label.style.pointerEvents='none';let successes=0,failures=[];
+    try{for(const file of files){if(file.size>5*1024*1024){failures.push(file.name+' (mais de 5 MB)');continue}const clean=String(file.name||'foto').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').slice(-100)||'foto.jpg';const path=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+clean;const response=await fetch(SUPABASE_URL+'/storage/v1/object/galeria-akanne/'+path,{method:'POST',headers:{'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+session.access_token,'Content-Type':file.type,'x-upsert':'false'},body:file});if(!response.ok){failures.push(file.name+' (erro '+response.status+')');console.error(await response.text());continue}successes++}await window.loadAkanneCloudGallery();if(successes&&failures.length===0)alert(successes+' foto(s) enviada(s) para a galeria online.');else alert((successes?successes+' foto(s) enviada(s). ':'Nenhuma foto foi enviada. ')+failures.join(', '))}catch(err){console.error(err);alert('Falha no envio. Confira as políticas do Supabase.')}finally{label.textContent=oldText;label.style.pointerEvents='';this.value=''}
+  },true);
+  // Atualiza a galeria depois de instalar as interações sociais.
+  if(window.loadAkanneCloudGallery)window.loadAkanneCloudGallery();
 })();
 </script>
 
