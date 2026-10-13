@@ -407,20 +407,99 @@ renderTimes();
   const originalRender=window.renderGallery;
   window.renderGallery=function(){originalRender();const grid=$g('galleryGrid');if(!grid)return;grid.querySelectorAll('.gallery-card').forEach(card=>{const img=card.querySelector('img');if(!img)return;const url=img.src;let path='';try{path=decodeURIComponent(new URL(url).pathname.split('/object/public/galeria-akanne/')[1]||'')}catch(e){}if(!path)return;const social=document.createElement('div');social.className='gallery-social';card.appendChild(social);loadSocial(path,card)})};
   // Replace the upload handler's authorization behavior: no active admin session means no upload.
-  $g('galleryUpload').addEventListener('change',async function(e){
-    e.stopImmediatePropagation();const {data}=await client.auth.getSession();const session=data.session;if(!session){alert('Entre na Área administrativa da galeria antes de adicionar fotos.');this.value='';return}
-    const files=Array.from(this.files||[]).filter(f=>f.type.startsWith('image/'));if(!files.length)return;
-    const label=document.querySelector('label[for="galleryUpload"]');const oldText=label.textContent;label.textContent='Enviando fotos...';label.style.pointerEvents='none';let successes=0,failures=[];
-    try{for(const file of files){if(file.size>5*1024*1024){failures.push(file.name+' (mais de 5 MB)');continue}const clean=String(file.name||'foto').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').slice(-100)||'foto.jpg';const path=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+clean;const response=await fetch(SUPABASE_URL+'/storage/v1/object/galeria-akanne/'+path,{method:'POST',headers:{'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+session.access_token,'Content-Type':file.type,'x-upsert':'false'},body:file});if(!response.ok){
-  const detalhe = await response.text();
-  failures.push(
-    file.name + ' (erro ' + response.status + '): ' + detalhe
-  );
-  console.error('Erro detalhado no envio:', detalhe);
-  continue;
-}
-}successes++}await window.loadAkanneCloudGallery();if(successes&&failures.length===0)alert(successes+' foto(s) enviada(s) para a galeria online.');else alert((successes?successes+' foto(s) enviada(s). ':'Nenhuma foto foi enviada. ')+failures.join(', '))}catch(err){console.error(err);alert('Falha no envio. Confira as políticas do Supabase.')}finally{label.textContent=oldText;label.style.pointerEvents='';this.value=''}
-  },true);
+  
+  $g('galleryUpload').addEventListener('change', async function(e) {
+    e.stopImmediatePropagation();
+
+    const { data } = await client.auth.getSession();
+    const session = data.session;
+
+    if (!session) {
+      alert('Entre na Área administrativa da galeria antes de adicionar fotos.');
+      this.value = '';
+      return;
+    }
+
+    const files = Array.from(this.files || []).filter(
+      file => file.type.startsWith('image/')
+    );
+
+    if (!files.length) return;
+
+    const label = document.querySelector('label[for="galleryUpload"]');
+    const oldText = label.textContent;
+
+    label.textContent = 'Enviando fotos...';
+    label.style.pointerEvents = 'none';
+
+    let successes = 0;
+    const failures = [];
+
+    try {
+      for (const file of files) {
+        if (file.size > 5 * 1024 * 1024) {
+          failures.push(file.name + ' (mais de 5 MB)');
+          continue;
+        }
+
+        const clean = String(file.name || 'foto.jpg')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9._-]+/g, '-')
+          .slice(-100) || 'foto.jpg';
+
+        const path =
+          Date.now().toString(36) + '-' +
+          Math.random().toString(36).slice(2, 8) + '-' +
+          clean;
+
+        const response = await fetch(
+          SUPABASE_URL + '/storage/v1/object/galeria-akanne/' + path,
+          {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': 'Bearer ' + session.access_token,
+              'Content-Type': file.type,
+              'x-upsert': 'false'
+            },
+            body: file
+          }
+        );
+
+        if (!response.ok) {
+          const detalhe = await response.text();
+
+          failures.push(
+            file.name + ' (erro ' + response.status + '): ' + detalhe
+          );
+
+          console.error('Erro detalhado no envio:', detalhe);
+          continue;
+        }
+
+        successes++;
+      }
+
+      await window.loadAkanneCloudGallery();
+
+      if (successes > 0 && failures.length === 0) {
+        alert(successes + ' foto(s) enviada(s) para a galeria online.');
+      } else {
+        alert(
+          (successes ? successes + ' foto(s) enviada(s). ' : 'Nenhuma foto foi enviada. ') +
+          failures.join(', ')
+        );
+      }
+    } catch (err) {
+      console.error('Falha no envio das fotos:', err);
+      alert('Falha no envio. Confira o erro no console do navegador.');
+    } finally {
+      label.textContent = oldText;
+      label.style.pointerEvents = '';
+      this.value = '';
+    }
+  }, true);
   // Atualiza a galeria depois de instalar as interações sociais.
   if(window.loadAkanneCloudGallery)window.loadAkanneCloudGallery();
 })();
